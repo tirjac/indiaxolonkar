@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Login</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+</head>
+<body>
+  <section class="section">
+    <div class="container is-fluid">
+      <h1 class="title">Login</h1>
+      {% if message %}
+        <div class="notification is-info">{{ message }}</div>
+      {% endif %}
+      <div class="box">
+        <form method="post" action="{{ base_path }}/login">
+          {% if require_code %}
+            <input type="hidden" name="email" value="{{ email }}">
+            <div class="field">
+              <label class="label">Verification Code</label>
+              <div class="control">
+                <input class="input" type="text" name="code" required>
+              </div>
+            </div>
+          {% else %}
+            <div class="field">
+              <label class="label">Email</label>
+              <div class="control">
+                <input class="input" type="email" name="email" value="{{ email or '' }}" required>
+              </div>
+            </div>
+            <div class="field">
+              <label class="label">Password</label>
+              <div class="control">
+                <input class="input" type="password" name="password" required>
+              </div>
+            </div>
+          {% endif %}
+          <div class="field">
+            <div class="control">
+              <button class="button is-primary is-fullwidth" type="submit">
+                {% if require_code %}Verify Code{% else %}Sign In{% endif %}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+      <a class="button is-light" href="{{ base_path }}/">Back</a>
+    </div>
+  </section>
+</body>
+</html>

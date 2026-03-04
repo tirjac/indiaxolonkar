@@ -1,0 +1,5 @@
+chalice>=1.32.0
+boto3>=1.0.0
+openai>=1.0.0
+jinja2>=3.0.0
+pillow>=10.0.0

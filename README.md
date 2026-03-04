@@ -1,2 +1,3 @@
 # indiaxolonkar
-image ads in whatsapp
+
+See `docs/README.md` for setup and usage.

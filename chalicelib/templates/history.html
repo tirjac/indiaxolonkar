@@ -1,0 +1,174 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>History</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+</head>
+<body>
+  <section class="section">
+    <div class="container is-fluid">
+      <h1 class="title">History</h1>
+      <p class="subtitle">Page {{ page }}</p>
+      <div class="buttons">
+        <button class="button is-light" onclick="window.location.reload()">Refresh</button>
+      </div>
+      <div id="refreshNotice" class="notification is-warning is-hidden">Please refresh page for status update</div>
+      <div class="box">
+        {% for item in items %}
+          <article class="media">
+            <figure class="media-left">
+              <p class="image is-64x64">
+                <a href="{{ item.get('transformed_url') }}" target="_blank">
+                  {% if item.get('thumbnail_url') %}
+                    <img src="{{ item.get('thumbnail_url') }}" alt="thumb">
+                  {% else %}
+                    <img src="https://bulma.io/images/placeholders/64x64.png" alt="placeholder">
+                  {% endif %}
+                </a>
+              </p>
+            </figure>
+            <div class="media-content">
+              <div class="content">
+                <p>
+                  <strong>{{ item.get('category') }}</strong>
+                  <span class="has-text-grey">• {{ item.get('objective') }}</span>
+                  <br>
+                  <span class="has-text-grey is-size-7 timeago" data-time="{{ item.get('created_at') }}">{{ item.get('created_at') }}</span>
+                  <br>
+                  {{ (item.get('comments') or '') | truncate(120, True) }}
+                </p>
+                {% if item.get('status') != 'failed' %}
+                  <div class="box">
+                    <div class="field">
+                      <label class="label is-small">Caption</label>
+                      <div class="control">
+                        <input class="input is-small caption-input" type="text" value="{{ item.get('caption') or '' }}">
+                      </div>
+                    </div>
+                    <div class="field">
+                      <label class="label is-small">Description</label>
+                      <div class="control">
+                        <textarea class="textarea is-small desc-input" rows="2">{{ item.get('description') or '' }}</textarea>
+                      </div>
+                    </div>
+                    <button class="button is-small is-link save-btn" data-task="{{ item.get('task_id') }}">Save</button>
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+            <div class="media-right">
+              {% if item.get('status') == 'failed' %}
+                <button class="button is-small is-warning retry-btn" data-task="{{ item.get('task_id') }}">Retry</button>
+              {% elif item.get('transformed_url') %}
+                <div class="buttons">
+                  <button class="button is-small is-light copy-btn" data-url="{{ item.get('transformed_url') }}">Copy Image</button>
+                  {% if item.get('share_url') %}
+                    <button class="button is-small is-light copy-btn" data-url="{{ item.get('share_url') }}">Copy Page</button>
+                  {% endif %}
+                </div>
+              {% endif %}
+            </div>
+          </article>
+          {% if not loop.last %}
+            <hr>
+          {% endif %}
+        {% endfor %}
+      </div>
+      <a class="button is-light" href="{{ base_path }}/">Back</a>
+    </div>
+  </section>
+<script>
+const basePath = "{{ base_path }}";
+document.querySelectorAll('.copy-btn').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    const url = btn.getAttribute('data-url');
+    try {
+      await navigator.clipboard.writeText(url);
+      btn.classList.add('is-success');
+      btn.textContent = 'Copied';
+      setTimeout(() => {
+        btn.classList.remove('is-success');
+        btn.textContent = 'Copy';
+      }, 1500);
+    } catch (e) {
+      btn.textContent = 'Failed';
+    }
+  });
+});
+
+document.querySelectorAll('.save-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const taskId = btn.getAttribute('data-task');
+    const container = btn.closest('.box');
+    const caption = container.querySelector('.caption-input')?.value || '';
+    const description = container.querySelector('.desc-input')?.value || '';
+    fetch(`${basePath}/update_task`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task_id: taskId, caption, description })
+    })
+    .then(r => r.json())
+    .then(resp => {
+      if (resp.error) {
+        btn.textContent = 'Error';
+        return;
+      }
+      btn.textContent = 'Saved';
+      setTimeout(() => { btn.textContent = 'Save'; }, 1200);
+    })
+    .catch(() => { btn.textContent = 'Error'; });
+  });
+});
+
+document.querySelectorAll('.retry-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const taskId = btn.getAttribute('data-task');
+    fetch(`${basePath}/update_task`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task_id: taskId, retry: true })
+    })
+    .then(r => r.json())
+    .then(resp => {
+      if (resp.error) {
+        btn.textContent = 'Error';
+        return;
+      }
+      btn.textContent = 'Queued';
+      const notice = document.getElementById('refreshNotice');
+      if (notice) {
+        notice.classList.remove('is-hidden');
+      }
+    })
+    .catch(() => { btn.textContent = 'Error'; });
+  });
+});
+
+function timeAgo(iso) {
+  const t = new Date(iso).getTime();
+  if (!t) return iso;
+  const diff = Math.floor((Date.now() - t) / 1000);
+  if (diff < 60) return `${diff}s ago`;
+  const mins = Math.floor(diff / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 4) return `${weeks}w ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  const years = Math.floor(days / 365);
+  return `${years}y ago`;
+}
+
+document.querySelectorAll('.timeago').forEach((el) => {
+  const iso = el.getAttribute('data-time');
+  el.textContent = timeAgo(iso);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,307 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Product Image Transformer</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+</head>
+<body>
+  <section class="section">
+    <div class="container is-fluid">
+      <div class="mb-4">
+        <h1 class="title">Product Image Transformer</h1>
+        <div class="tabs is-toggle is-toggle-rounded is-fullwidth">
+          <ul>
+            <li><a href="{{ base_path }}/terms">Terms</a></li>
+            <li><a href="{{ base_path }}/privacy">Privacy</a></li>
+            <li><a href="{{ base_path }}/history/1">History</a></li>
+            {% if is_logged_in %}
+              <li><a href="{{ base_path }}/logout">Logout</a></li>
+            {% else %}
+              <li><a href="{{ base_path }}/login">Login</a></li>
+            {% endif %}
+          </ul>
+        </div>
+      </div>
+
+      <p class="subtitle">Upload a product image, pick an objective and category, and get a conversion-optimized result.</p>
+
+      <div class="columns is-multiline">
+        <div class="column is-12-mobile is-5-desktop">
+          <div class="box">
+            <form id="uploadForm" method="post" enctype="multipart/form-data" action="{{ base_path }}/upload" onsubmit="return false;">
+              <div class="field">
+                <label class="label">Image</label>
+                <div class="control">
+                  <input class="input" type="file" name="image" required>
+                </div>
+              </div>
+
+              <div class="field">
+                <label class="label">Objective</label>
+                <div class="control">
+                  <label class="radio">
+                    <input type="radio" name="objective" value="sales" checked> Sales
+                  </label>
+                  <label class="radio">
+                    <input type="radio" name="objective" value="engagement"> Engagement
+                  </label>
+                </div>
+              </div>
+
+              <div class="field">
+                <label class="label">Category</label>
+                <div class="control">
+                  <div class="select is-fullwidth">
+                    <select name="category">
+                      {% for c in categories %}
+                        <option value="{{ c }}">{{ c }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div class="field">
+                <label class="label">Optional Comments</label>
+                <div class="control">
+                  <textarea class="textarea" name="comments" rows="4"></textarea>
+                </div>
+              </div>
+
+              <div class="field">
+                <label class="label">CTA</label>
+                <div class="control">
+                  <label class="radio">
+                    <input type="radio" name="contact_type" value="product_url" checked> Product URL
+                  </label>
+                  <label class="radio">
+                    <input type="radio" name="contact_type" value="mobile_no"> Mobile No
+                  </label>
+                </div>
+              </div>
+
+              <div class="field">
+                <label class="label" id="contactLabel">Product URL</label>
+                <div class="control">
+                  <input class="input" type="text" name="contact_value" id="contactValue" placeholder="https://example.com/product">
+                </div>
+              </div>
+
+              <div class="field">
+                <div class="control">
+                  <button id="uploadBtn" class="button is-primary is-fullwidth" type="button">Upload</button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div class="column is-12-mobile is-7-desktop">
+          <div id="status" class="notification is-light">Ready.</div>
+          <div id="result"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+<script>
+const form = document.getElementById('uploadForm');
+const uploadBtn = document.getElementById('uploadBtn');
+const statusEl = document.getElementById('status');
+const resultEl = document.getElementById('result');
+const contactLabel = document.getElementById('contactLabel');
+const contactValue = document.getElementById('contactValue');
+window.DEBUG_MODE = {{ 'true' if debug_mode else 'false' }};
+
+let countdownInterval = null;
+let pollTimeout = null;
+
+function clearCountdown() {
+  if (countdownInterval) {
+    clearInterval(countdownInterval);
+    countdownInterval = null;
+  }
+}
+
+function clearPoll() {
+  if (pollTimeout) {
+    clearTimeout(pollTimeout);
+    pollTimeout = null;
+  }
+}
+
+function renderCountdown(secondsLeft) {
+  const total = 300;
+  const elapsed = total - secondsLeft;
+  const percent = Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)));
+  resultEl.innerHTML = `
+    <div class="box">
+      <p class="mb-2"><strong>Processing</strong> &middot; ${secondsLeft}s</p>
+      <progress class="progress is-info" value="${percent}" max="100">${percent}%</progress>
+      <p class="is-size-7 has-text-grey">This can take up to 300 seconds. You can keep this page open.</p>
+    </div>
+  `;
+}
+
+function updateContactUI() {
+  const type = form.querySelector('input[name="contact_type"]:checked')?.value || 'product_url';
+  if (type === 'mobile_no') {
+    contactLabel.textContent = 'Mobile No';
+    contactValue.placeholder = 'e.g. +1 555 123 4567';
+  } else {
+    contactLabel.textContent = 'Product URL';
+    contactValue.placeholder = 'https://example.com/product';
+  }
+}
+
+form.querySelectorAll('input[name="contact_type"]').forEach((el) => {
+  el.addEventListener('change', updateContactUI);
+});
+updateContactUI();
+
+function renderResult(data) {
+  if (data.status === 'failed') {
+    clearCountdown();
+    clearPoll();
+    statusEl.className = 'notification is-danger';
+    statusEl.textContent = 'Status: failed';
+    resultEl.innerHTML = `
+      <div class="box">
+        <p class="has-text-weight-semibold">Error</p>
+        <p>${data.error || 'Processing failed.'}</p>
+      </div>
+    `;
+    return;
+  }
+  if (data.status && data.status !== 'completed') {
+    statusEl.className = 'notification is-warning';
+    statusEl.textContent = 'Status: ' + data.status;
+    return;
+  }
+  if (!data.photo_url) return;
+  clearCountdown();
+  clearPoll();
+  statusEl.className = 'notification is-success';
+  statusEl.textContent = 'Status: completed';
+  resultEl.innerHTML = `
+    <div class="box">
+      <p class="mb-2"><strong>Comments:</strong> ${data.comments || ''}</p>
+      <p><a href="${data.photo_url}" target="_blank">Transformed photo URL</a></p>
+      ${data.share_url ? `<p><a id="shareLink" href="${data.share_url}" target="_blank">Share Page URL</a></p>` : ``}
+      <div class="columns is-multiline mt-4">
+        <div class="column is-6">
+          <p class="has-text-weight-semibold">Original</p>
+          <figure class="image">
+            <img src="${data.original_url}" />
+          </figure>
+        </div>
+        <div class="column is-6">
+          <p class="has-text-weight-semibold">Transformed</p>
+          <figure class="image">
+            <img src="${data.photo_url}" />
+          </figure>
+        </div>
+      </div>
+      <div class="box">
+        <p class="has-text-weight-semibold">Edit Listing</p>
+        <div class="field">
+          <label class="label">Caption</label>
+          <div class="control">
+            <input class="input" id="editCaption" type="text" value="${data.caption || ''}">
+          </div>
+        </div>
+        <div class="field">
+          <label class="label">Description</label>
+          <div class="control">
+            <textarea class="textarea" id="editDescription" rows="3">${data.description || ''}</textarea>
+          </div>
+        </div>
+        <button class="button is-link is-small" id="saveListingBtn">Save</button>
+      </div>
+      ${window.DEBUG_MODE ? `
+      <div class="content">
+        <p><strong>Output (format)</strong></p>
+        <pre>{ "photo_url": "${data.photo_url}", "comments": "${(data.comments || '').replace(/"/g, '\\"')}" }</pre>
+      </div>
+      ` : ``}
+    </div>
+  `;
+  const saveBtn = document.getElementById('saveListingBtn');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', () => {
+      const caption = document.getElementById('editCaption')?.value || '';
+      const description = document.getElementById('editDescription')?.value || '';
+      fetch(`${basePath}/update_task`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task_id: data.task_id, caption, description })
+      })
+      .then(r => r.json())
+      .then(resp => {
+        if (resp.error) {
+          alert(resp.error);
+          return;
+        }
+        if (resp.share_url) {
+          const shareLink = document.getElementById('shareLink');
+          if (shareLink) shareLink.setAttribute('href', resp.share_url);
+        }
+      })
+      .catch(() => alert('Failed to update.'));
+    });
+  }
+}
+
+const basePath = "{{ base_path }}";
+
+function pollStatus(taskId) {
+  fetch(`${basePath}/upload?task_id=${taskId}`)
+    .then(r => r.json())
+    .then(data => {
+      renderResult(data);
+      if (data.status && data.status !== 'completed' && data.status !== 'failed') {
+        pollTimeout = setTimeout(() => pollStatus(taskId), 2500);
+      }
+    })
+    .catch(() => { pollTimeout = setTimeout(() => pollStatus(taskId), 2500); });
+}
+
+uploadBtn.addEventListener('click', () => {
+  clearCountdown();
+  clearPoll();
+  const fd = new FormData(form);
+  statusEl.className = 'notification is-info';
+  statusEl.textContent = 'Uploading...';
+  resultEl.innerHTML = '';
+  fetch(`${basePath}/upload`, { method: 'POST', body: fd })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error || !data.task_id) {
+        statusEl.className = 'notification is-danger';
+        statusEl.textContent = data.error || 'Upload failed.';
+        return;
+      }
+      statusEl.className = 'notification is-warning';
+      statusEl.textContent = 'Queued. Processing...';
+      let secondsLeft = 300;
+      renderCountdown(secondsLeft);
+      countdownInterval = setInterval(() => {
+        secondsLeft -= 1;
+        if (secondsLeft <= 0) {
+          clearCountdown();
+          return;
+        }
+        renderCountdown(secondsLeft);
+      }, 1000);
+      pollStatus(data.task_id);
+    })
+    .catch(() => {
+      statusEl.className = 'notification is-danger';
+      statusEl.textContent = 'Upload failed.';
+    });
+});
+</script>
+</body>
+</html>
