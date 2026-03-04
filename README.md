@@ -1,3 +1,3 @@
 # indiaxolonkar
 
-See `docs/README.md` for setup and usage.
+See [docs](./docs/README.md)
