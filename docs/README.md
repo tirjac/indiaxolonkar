@@ -33,3 +33,10 @@
 
 - `SES_FROM_EMAIL`: Verified sender email address (SES email identity) used to send login/verification emails.
 - `OPENAI_API_KEY`: API key used to call the OpenAI API for image + text generation.
+
+## Other Docs
+
+- [Architecture](./ARCHITECTURE.md)
+- [Scripts](./SCRIPTS.md)
+- [Setup](./SETUP.md)
+- [Custom Domain](./CUSTOMDOMAIN.md)
